@@ -6,14 +6,18 @@ class Obfuscator {
     private let mangler: SymbolMangling
 
     private let methTypeObfuscation: Bool
+    
+    private let swiftReflectionObfuscation: Bool
 
-    init(directoryURL: URL, mangler: SymbolMangling, methTypeObfuscation: Bool = false) {
+    init(directoryURL: URL, mangler: SymbolMangling, methTypeObfuscation: Bool = false, swiftReflectionObfuscation: Bool = false) {
         self.directoryURL = directoryURL
         self.mangler = mangler
         self.methTypeObfuscation = methTypeObfuscation
+        self.swiftReflectionObfuscation = swiftReflectionObfuscation
     }
 
-    func run(loader: ImageLoader & SymbolsSourceLoader & DependencyNodeLoader = SimpleImageLoader()) {
+    func run(loader: ImageLoader & SymbolsSourceLoader & DependencyNodeLoader = SimpleImageLoader(),
+             headerLoader: HeaderSymbolsLoader = SimpleHeaderSymbolsLoader()) {
         LOGGER.info("Will obfuscate \(directoryURL)")
 
         LOGGER.info("Looking for dependencies...")
@@ -22,7 +26,7 @@ class Obfuscator {
         LOGGER.info("\(paths.nibs.count) obfuscable NIBs")
 
         LOGGER.info("Collecting symbols...")
-        let symbols = ObfuscationSymbols.buildFor(obfuscationPaths: paths, loader: loader)
+        let symbols = ObfuscationSymbols.buildFor(obfuscationPaths: paths, loader: loader, headerLoader: headerLoader)
         LOGGER.info("\(symbols.whitelist.selectors.count) obfuscable selectors")
         LOGGER.info("\(symbols.whitelist.classes.count) obfuscable classes")
         LOGGER.info("\(symbols.blacklist.selectors.count) unobfuscable selectors")
@@ -32,7 +36,14 @@ class Obfuscator {
         let manglingMap = mangler.mangleSymbols(symbols)
         LOGGER.info("\(manglingMap.selectors.count) mangled selectors")
         LOGGER.info("\(manglingMap.classNames.count) mangled classes")
+        if swiftReflectionObfuscation {
+            LOGGER.info("Will obfuscate Swift reflection sections")
+        }
+        if methTypeObfuscation {
+            LOGGER.info("Will obfuscate methType sections")
+        }
 
+        
         var savable: [Savable] = []
 
         for obfuscableImage in paths.obfuscableImages {
@@ -41,8 +52,9 @@ class Obfuscator {
             image.replaceSymbols(withMap: manglingMap, paths: paths)
             // TODO: add option
             image.eraseSymtab()
-            // TODO: add option
-            image.eraseSwiftReflectiveSections()
+            if swiftReflectionObfuscation {
+                image.eraseSwiftReflectiveSections()
+            }
             if methTypeObfuscation {
                 image.eraseMethTypeSection()
             }
